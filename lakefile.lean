@@ -5,8 +5,10 @@ package «CardanoLedgerApi» where
   -- add package configuration options here
   moreGlobalServerArgs := #["--threads=4"]
   moreLeanArgs := #["--threads=4"]
-  require PlutusCore from git "https://github.com/input-output-hk/PlutusCoreBlaster" @ "main"
-  require Blaster from git "https://github.com/input-output-hk/Lean-blaster" @ "beta-lambda-cache-optimization"
+  -- Investigation branch (#138 telemetry): local paths for fast iteration.
+  -- Originals: PlutusCore @ git main; Blaster @ git beta-lambda-cache-optimization
+  require PlutusCore from "/Users/romainsoulat/PlutusCoreBlaster"
+  require Blaster from "/Users/romainsoulat/Lean-blaster"
 
 @[default_target]
 lean_lib «CardanoLedgerApi» where
