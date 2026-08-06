@@ -40,10 +40,22 @@ instance : IsData Bool where
       else none
   | _ => none
 
-instance [IsData a] : IsData (Option a) where
-  toData
+/-- `toData` for `Option`, as a named function so it can be tagged below.
+    Blaster keeps tagged functions folded (a single application node) when the
+    argument is symbolic; inlined, this `match` would otherwise sit stuck
+    inside converted `Data` trees and be re-optimized on every revisit of the
+    machine state during `#prep_uplc`. -/
+def optionToData [IsData a] : Option a → Data
   | none => mkDataConstr 1
   | some x => mkDataConstr 0 [IsData.toData x]
+
+open Lean Elab Command in
+run_cmd liftTermElabM do
+  discard <| Lean.Meta.getUnfoldEqnFor? ``optionToData (nonRec := true)
+  Lean.Meta.markAsRecursive ``optionToData
+
+instance [IsData a] : IsData (Option a) where
+  toData := optionToData
   fromData
   | Data.Constr 1 [] => some none
   | Data.Constr 0 [r_data] =>

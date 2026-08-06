@@ -171,13 +171,22 @@ instance : LE ScriptPurpose where
 instance : DecidableLE ScriptPurpose :=
   fun x y => inferInstanceAs (Decidable (¬ (y < x)))
 
-/-- IsData instance for ScriptPurpose -/
-instance : IsData ScriptPurpose where
-  toData
+/-- `toData` for `ScriptPurpose`, named and tagged so Blaster keeps it folded
+    on symbolic values (see `CardanoLedgerApi.IsData.Class.optionToData`). -/
+def scriptPurposeToData : ScriptPurpose → Data
   | .Minting cs => mkDataConstr 0 [IsData.toData cs]
   | .Spending ref => mkDataConstr 1 [IsData.toData ref]
   | .Rewarding cred => mkDataConstr 2 [IsData.toData cred]
   | .Certifying cert => mkDataConstr 3 [IsData.toData cert]
+
+open Lean Elab Command in
+run_cmd liftTermElabM do
+  discard <| Lean.Meta.getUnfoldEqnFor? ``scriptPurposeToData (nonRec := true)
+  Lean.Meta.markAsRecursive ``scriptPurposeToData
+
+/-- IsData instance for ScriptPurpose -/
+instance : IsData ScriptPurpose where
+  toData := scriptPurposeToData
   fromData
   | Data.Constr 0 [Data.B cs] => some (.Minting cs)
   | Data.Constr 1 [r_ref] =>
