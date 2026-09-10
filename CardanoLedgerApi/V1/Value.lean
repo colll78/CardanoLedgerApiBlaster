@@ -174,9 +174,12 @@ token name to quantity, so code generated from a blueprint types that field as
 type and a ledger function needs to cross between them, and this is the
 crossing. Total and injective: every typed map denotes exactly one `Value`.
 
-Does not sort or normalise. A `Value` is expected to satisfy `validTxOutValue`
-or `validMintValue`, and a typed map that does not is carried across unchanged
-rather than silently repaired. -/
+Does not sort or normalise, so the caller keeps the obligation every other
+function here places on a `Value`: `validTxOutValue` or `validMintValue`. This
+matters downstream — `merge` walks both arguments assuming their currency
+symbols and token names are ordered, and falls through to its last branch when
+they are not. A typed map whose keys are out of order therefore crosses over
+unchanged and merges wrongly, rather than being silently repaired here. -/
 def ofTypedValue (v : List (CurrencySymbol × List (TokenName × Integer))) : Value :=
   v.map fun entry =>
     (Data.B entry.1, Data.Map (entry.2.map fun token => (Data.B token.1, Data.I token.2)))
