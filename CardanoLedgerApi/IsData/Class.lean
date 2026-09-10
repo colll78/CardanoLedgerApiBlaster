@@ -15,6 +15,17 @@ class IsData (α : Type u) where
 def mkDataConstr (tag : Integer) (fields : List Data := []) : Data :=
   Data.Constr tag fields
 
+/-- `Data`-encode a ledger value with the ledger's own encoding.
+
+The same thing as `IsData.toData`, under a name that cannot collide. There are
+two structurally identical `IsData` classes in play — this one and
+`PlutusCore.IsData` — and a property stated against a compiled validator has
+both in scope: the ledger types come from here, the generated blueprint types
+from there. `IsData.toData` is ambiguous in that scope; this is not.
+
+Reducible, so it disappears before a solver sees the term. -/
+abbrev toLedgerData {a : Type u} [IsData a] (x : a) : Data := IsData.toData x
+
 instance : IsData Data where
   toData x := x
   fromData x := x

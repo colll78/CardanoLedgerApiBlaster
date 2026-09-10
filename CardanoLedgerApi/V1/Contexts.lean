@@ -975,6 +975,21 @@ def validTxRange (r_range : Data) : Bool :=
   | some range => !(isEmpty range)
   | none => false
 
+/-- Does the validity range encoded in `r_range` begin, inclusively, at `t`?
+
+`false` for a range that does not decode, as `validTxRange` is for one that is
+empty: a caller asking where a range starts has no answer for something that is
+not a range.
+
+The predicate a deadline property wants. It pins the schedule to a single time,
+which `includes (after t) range` — the range begins at or *after* `t` — does
+not: under the weaker reading two different `t` both hold, and the schedule they
+select need not agree. -/
+def txRangeStartsAt (t : POSIXTime) (r_range : Data) : Bool :=
+  match IsData.fromData r_range with
+  | some range => startsAt t range
+  | none => false
+
 /-- [LEDGER-RULE]: Ledger rules for transaction's signers.
     The transaction's signers list is valid if and only if one of the following conditions is satisfied:
       1. Signers list is empty
