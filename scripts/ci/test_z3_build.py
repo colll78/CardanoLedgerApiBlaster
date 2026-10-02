@@ -42,7 +42,9 @@ class Z3BuildTests(unittest.TestCase):
             path.write_text(content)
             path.chmod(0o755)
         self.env = dict(os.environ, PATH=str(bins) + ':' + os.environ['PATH'],
-                        Z3_WORK_DIR=str(self.root / 'work'))
+                        Z3_WORK_DIR=str(self.root / 'work'),
+                        GITHUB_ENV=str(self.root / 'github-env'),
+                        GITHUB_PATH=str(self.root / 'github-path'))
         self.env.pop('Z3_COMMIT', None)
 
     def run_build(self, **env):
@@ -55,6 +57,8 @@ class Z3BuildTests(unittest.TestCase):
         evidence = self.root / '.ci-results'
         self.assertEqual(json.loads((evidence / 'z3-source.json').read_text())['source_commit'], SHA)
         self.assertTrue((evidence / 'z3-bin-path.txt').exists())
+        self.assertEqual((self.root / 'github-env').read_text(), 'Z3_COMMIT=' + SHA + '\n')
+        self.assertIn(str(self.root), (self.root / 'github-path').read_text())
 
     def test_invalid_revision_and_mismatched_checkout_fail(self):
         for env in [{'Z3_COMMIT': 'master'}, {'CHECKOUT_SHA': 'b' * 40}]:
