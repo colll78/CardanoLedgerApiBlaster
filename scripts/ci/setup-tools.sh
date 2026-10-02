@@ -20,17 +20,10 @@ if [[ -n "${LEAN_TOOLCHAIN:-}" ]]; then
 fi
 elan toolchain install "$toolchain"
 
-z3_archive=z3-4.15.2-x64-glibc-2.39.zip
-curl --fail --silent --show-error --location \
-  "https://github.com/Z3Prover/z3/releases/download/z3-4.15.2/$z3_archive" \
-  -o "$RUNNER_TEMP/$z3_archive"
-printf '%s  %s\n' \
-  85d2da1bf440fca3288874c2a06e23f96d09befcc21b5a7489fe0fa40444e685 \
-  "$RUNNER_TEMP/$z3_archive" | sha256sum --check
-unzip -q -o "$RUNNER_TEMP/$z3_archive" -d "$RUNNER_TEMP"
-z3_bin="$RUNNER_TEMP/z3-4.15.2-x64-glibc-2.39/bin"
+# Resolve and build Z3 master, retaining the source SHA and compiler log.
+bash "$(dirname "$0")/build-z3.sh"
+z3_bin=$(cat .ci-results/z3-bin-path.txt)
 export PATH="$z3_bin:$PATH"
-echo "$z3_bin" >> "$GITHUB_PATH"
 lean --version
 lake --version
 z3 --version

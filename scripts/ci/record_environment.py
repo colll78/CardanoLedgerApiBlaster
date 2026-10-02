@@ -29,6 +29,8 @@ def main():
         'lean': output('lean', '--version'),
         'lake': output('lake', '--version'),
         'z3': output('z3', '--version'),
+        'z3_source': json.loads((dest / 'z3-source.json').read_text())
+                     if (dest / 'z3-source.json').exists() else None,
         'lake_manifest': json.loads(manifest.read_text()) if manifest.exists() else None,
     }
     (dest / 'environment.json').write_text(json.dumps(data, indent=2) + '\n')

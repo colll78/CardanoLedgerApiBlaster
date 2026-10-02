@@ -1,8 +1,7 @@
 # CI operation
 
 `ci-linux` keeps the existing required `build` check. It checks the build-script
-regressions, uses the repository's `lean-toolchain`, installs Z3 4.15.2 after
-verifying its release checksum, and builds the library and tests. Checkouts keep
+regressions, uses the repository's `lean-toolchain`, resolves Z3 master to a full commit SHA and builds that snapshot from source, and builds the library and tests. Checkouts keep
 no GitHub credentials; execution jobs have `contents: read`. Actions and the elan
 installer source are pinned. The workflow validation job uses a checksum-verified
 actionlint 1.7.12. Its two exact schema exceptions cover `queue` and
@@ -23,8 +22,7 @@ Artifacts last 14 days. CI evidence is ignored by Git. Dependency branch policie
 are unchanged: these records identify the commits resolved for each run; they do
 not turn moving dependency branches into a stable release baseline.
 
-The daily nightly-Lean workflow builds both the library and tests with the same
-Z3. Failures leave a red build job, even if reporting succeeds. A separate reporter
+The daily nightly-Lean workflow builds both the library and tests with Z3 master. Failures leave a red build job, even if reporting succeeds. A separate reporter
 executes no repository code. It creates one bot-owned issue per failure episode,
 stays quiet during repeated failures, then comments once and closes that issue on
 recovery. The marker `<!-- blaster-nightly-lean -->` identifies these issues;
@@ -40,7 +38,7 @@ make check_all
 ```
 
 The first two checks require Python 3 and Node.js, respectively; `make check_all`
-requires this repository's Lean and Z3 environment. CI runner timeouts bound
+requires this repository's Lean and Z3 master environment. CI runner timeouts bound
 cost but are not performance thresholds. Preserve the existing required-check
 rules until the new workflows have been observed on actual PRs.
 
@@ -68,3 +66,18 @@ expected results, adding `sorry`/axioms, or silently excluding a failing categor
    base/head runs on equal environments and a controlled runner.
 
 These later stages are follow-up work, not silently enabled by this change.
+
+## Z3 master policy
+
+Every run resolves Z3 master to a full commit and builds exactly that snapshot.
+`.ci-results/z3-source.json` records the source ref, commit and build mode;
+`z3-build.log` records compiler/configuration output. `environment.json` includes
+both this source metadata and the executable's version. A moving master baseline
+is identified by its commit, never only by a release-like version string.
+
+Set `Z3_COMMIT=<full-SHA>` to replay an earlier master snapshot exactly. This is
+also how the ecosystem matrix shares one solver commit across both consumers.
+`Z3_BUILD_JOBS` defaults to two to limit memory pressure; a failed build fails CI.
+The compiler and system libraries come from ubuntu-24.04. No built-solver cache is
+restored. Manual local source builds can run `bash scripts/ci/build-z3.sh`; add the
+absolute directory recorded in `.ci-results/z3-bin-path.txt` to PATH afterwards.
