@@ -29,7 +29,7 @@ class BuildCheckTests(unittest.TestCase):
     def run_check(self, *args, status=0):
         return subprocess.run(['bash', str(CHECKER), *args], cwd=self.root,
                               env=dict(self.env, LAKE_STATUS=str(status)),
-                              capture_output=True, text=True)
+                              capture_output=True, text=True, timeout=10)
 
     def test_cached_success_and_unimported_module(self):
         self.assertEqual(self.run_check('Tests').returncode, 0)
@@ -42,6 +42,25 @@ class BuildCheckTests(unittest.TestCase):
     def test_lake_failure_survives_successful_tee(self):
         self.assertNotEqual(self.run_check('Tests', status=37).returncode, 0)
         self.assertIn('cached build', (self.root / 'build.log').read_text())
+
+    def test_timeout_fails_and_records_the_running_command(self):
+        lake = self.root / 'bin/lake'
+        lake.write_text('#!/usr/bin/env bash\necho "started"\nsleep 30\n')
+        self.env['BUILD_TIMEOUT_SECONDS'] = '0.2'
+        result = self.run_check('Tests')
+        self.assertEqual(result.returncode, 124)
+        self.assertIn('BUILD TIMEOUT', result.stdout)
+        import json
+        report = json.loads((self.root / '.ci-results/build/Tests.json').read_text())
+        self.assertTrue(report['timed_out'])
+        self.assertEqual(report['command'][:2], ['lake', 'build'])
+        self.assertEqual(report['exit_code'], 124)
+
+    def test_invalid_timeout_fails_before_lake(self):
+        for limit in ['0', '-1', 'nan', 'inf', 'invalid']:
+            self.env['BUILD_TIMEOUT_SECONDS'] = limit
+            self.assertNotEqual(self.run_check('Tests').returncode, 0)
+        self.assertFalse((self.root / 'invocation').exists())
 
     def test_excludes_subtree_and_barrel_but_not_similar_prefix(self):
         (self.root / 'Tests/ConformanceExtra.lean').write_text('-- fixture')

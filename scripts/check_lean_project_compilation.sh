@@ -7,6 +7,7 @@ if [[ $# -lt 1 || $# -gt 3 ]]; then
   echo "usage: $0 <Lake target> [source directory] [excluded subtree]" >&2
   exit 2
 fi
+script_dir="$(cd "$(dirname "$0")" && pwd)"
 target=$1
 source_dir=${2:-${target//./\/}}
 exclude=${3:-}
@@ -46,5 +47,7 @@ fi
 # logs as well so a later build cannot overwrite earlier evidence.
 {
   printf 'Building %s and %s selected modules\n' "$target" "${#modules[@]}"
-  lake build "$target" "${modules[@]}"
+  python3 "$script_dir/ci/run_bounded.py" \
+    --timeout "${BUILD_TIMEOUT_SECONDS:-1800}" \
+    --report "$log_dir/${target//./_}.json" -- lake build "$target" "${modules[@]}"
 } 2>&1 | tee "$log" build.log

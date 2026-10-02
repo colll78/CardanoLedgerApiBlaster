@@ -30,13 +30,14 @@ jobs:
         run: |
           python3 scripts/ci/test_build_check.py
           python3 scripts/ci/test_z3_build.py
+          python3 scripts/ci/test_bounded_z3.py
           node scripts/ci/test_nightly_report.cjs
       - name: Setup Lean and Z3 master
         run: bash scripts/ci/setup-tools.sh
       - name: Build and validate CardanoLedgerApi
         run: make check_cardano_ledger_api
       - name: Execute and validate tests
-        run: LEAN_NUM_THREADS=5 ./scripts/check_lean_project_compilation.sh Tests
+        run: BUILD_TIMEOUT_SECONDS=900 LEAN_NUM_THREADS=5 ./scripts/check_lean_project_compilation.sh Tests
       - name: Record tested environment
         if: always()
         run: python3 scripts/ci/record_environment.py

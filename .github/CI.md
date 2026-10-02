@@ -81,3 +81,32 @@ also how the ecosystem matrix shares one solver commit across both consumers.
 The compiler and system libraries come from ubuntu-24.04. No built-solver cache is
 restored. Manual local source builds can run `bash scripts/ci/build-z3.sh`; add the
 absolute directory recorded in `.ci-results/z3-bin-path.txt` to PATH afterwards.
+
+## Bounded execution and stalled solver diagnostics
+
+The build checker defaults to a 1,800-second wall deadline; PR tests use
+`BUILD_TIMEOUT_SECONDS=900`. Every minute it logs the processes in its own build
+process group, including Lean module paths. On timeout it saves those processes,
+command, elapsed time and exit status in `.ci-results/build/<target>.json`,
+terminates only that build's processes and returns 124. Artifacts can therefore
+upload before the outer job deadline.
+
+CI setup installs a transparent Z3 proxy with a 120-second wall deadline per
+solver session (`Z3_SOLVER_TIMEOUT_SECONDS` can override it). Original solver
+options and responses remain unchanged. Each session retains the exact submitted
+SMT input and timing/exit metadata under `.ci-results/solver/`. A wall timeout is
+an explicit protocol error and failed compilation, never an `unknown` result
+that could be accepted as a warning. Intentional `(solve-result: 2)` tests keep
+their original solver timeout and expected result. Source assertions and solver
+seeds are unchanged.
+
+Replay a captured session with the Z3 commit from `environment.json`:
+
+```sh
+python3 scripts/ci/run_bounded.py --timeout 130 --report replay.json -- \
+  z3 -smt2 .ci-results/solver/z3-<session-id>.smt2
+python3 scripts/ci/test_bounded_z3.py
+```
+
+The captured input is exactly what Lean submitted; a hard interruption may leave
+it partial. Use a wall deadline when replaying a stalled query.

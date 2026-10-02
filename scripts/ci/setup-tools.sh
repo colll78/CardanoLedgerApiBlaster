@@ -27,3 +27,16 @@ export PATH="$z3_bin:$PATH"
 lean --version
 lake --version
 z3 --version
+
+# Bound individual solver sessions and retain replayable SMT input. This proxy
+# preserves ordinary responses and never converts a hard timeout to 'unknown'.
+real_z3=$(command -v z3)
+proxy="$PWD/.ci-results/solver-bin"
+mkdir -p "$proxy"
+cp "$(dirname "$0")/bounded_z3.py" "$proxy/z3"
+chmod +x "$proxy/z3"
+export Z3_REAL_EXECUTABLE="$real_z3"
+if [[ -n "${GITHUB_ENV:-}" ]]; then
+  echo "Z3_REAL_EXECUTABLE=$real_z3" >> "$GITHUB_ENV"
+fi
+echo "$proxy" >> "$GITHUB_PATH"
