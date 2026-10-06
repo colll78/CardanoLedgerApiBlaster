@@ -63,21 +63,55 @@ instance : LawfulBEq ScriptPurpose where
   rfl {bs} := by simp [BEq.beq]
 
 
+/-- Strict order on `ScriptPurpose` **in the order the Cardano ledger emits
+`txInfoRedeemers`**, which is NOT the Plutus constructor order.
+
+LEDGER CITATION (checkout `cd8b7fab8`).  `txInfoRedeemers` is built by
+`transTxRedeemers = PV2.unsafeFromList <$> mapM (transRedeemerPtr …) (Map.toList
+$ tx ^. witsTxL . rdmrsTxWitsL . unRedeemersL)`
+(`eras/babbage/impl/src/Cardano/Ledger/Babbage/TxInfo.hs:217-221`, used for V3 at
+`eras/conway/impl/src/Cardano/Ledger/Conway/TxInfo.hs:499,512`).  `Map.toList`
+enumerates in `PlutusPurpose AsIx ConwayEra` = `ConwayPlutusPurpose AsIx` order
+and `unsafeFromList` does NOT re-sort, so the emitted key order is the DERIVED
+`Ord` of
+
+    ConwaySpending | ConwayMinting | ConwayCertifying | ConwayRewarding
+                   | ConwayVoting  | ConwayProposing
+
+(`eras/conway/impl/src/Cardano/Ledger/Conway/Scripts.hs:202-213`), i.e.
+**`Spending < Minting < Certifying < Rewarding < Voting < Proposing`** — not the
+Plutus declaration order (`Minting` first) that this function used before.  The
+old order made `validRedeemerMap`, hence `validMintingContext`, UNSATISFIABLE for
+any transaction carrying both a spending and a minting redeemer (defect D1).
+
+INTRA-KIND order is unchanged and agrees with the ledger, because the ledger's
+`AsIx` index is the position in an already-sorted collection and the Plutus key's
+leading component sorts the same way: `Spending` ← `Set.toList txInputs` (`TxIn`
+= (`TxId`,`TxIx`) ≡ `ltTxOutRef`); `Minting` ← the `MultiAsset` policy map
+(`PolicyID` ≡ `CurrencySymbol` bytes); `Rewarding` ← the withdrawal map, whose
+key order is `Credential` (see `V1/Credential.lean`'s `ltCredential`, fixed for
+defect D2) modulo the `Network` component that Plutus drops — harmless because
+`validateWrongNetworkWithdrawal`
+(`eras/shelley/impl/src/Cardano/Ledger/Shelley/Rules/Utxo.hs:181,384`) forces one
+network per transaction; `Certifying`/`Proposing` compare their `Integer` index
+first, which IS the `AsIx` index; `Voting` ← the `VotingProcedures` map, and the
+ledger's `Voter` `Ord` (`Conway/Governance/Procedures.hs:338-342`) has the same
+constructor order as `ltVoter`. -/
 def ltScriptPurpose (x y : ScriptPurpose) : Bool :=
   match x, y with
-  | .Minting cs1, .Minting cs2 => cs1 < cs2
-  | .Minting _, _ => true
   | .Spending tref1, .Spending tref2 => tref1 < tref2
-  | .Spending _, .Minting _ => false
   | .Spending _, _ => true
-  | .Rewarding cred1, .Rewarding cred2 => cred1 < cred2
-  | .Rewarding _, .Minting _
-  | .Rewarding _, .Spending _ => false
-  | .Rewarding _, _ => true
+  | .Minting cs1, .Minting cs2 => cs1 < cs2
+  | .Minting _, .Spending _ => false
+  | .Minting _, _ => true
   | .Certifying n1 cert1, .Certifying n2 cert2 => n1 < n2 || (n1 == n2 && cert1 < cert2)
-  | .Certifying .., .Voting _
-  | .Certifying .., .Proposing .. => true
-  | .Certifying .., _ => false
+  | .Certifying .., .Spending _
+  | .Certifying .., .Minting _ => false
+  | .Certifying .., _ => true
+  | .Rewarding cred1, .Rewarding cred2 => cred1 < cred2
+  | .Rewarding _, .Voting _
+  | .Rewarding _, .Proposing .. => true
+  | .Rewarding _, _ => false
   | .Voting v1, .Voting v2 => v1 < v2
   | .Voting _, .Proposing .. => true
   | .Voting _, _ => false
@@ -294,7 +328,19 @@ instance : IsData TxInInfo where
 /-- Unlike V1/V2, MintValue does not contain Ada with zero quantity -/
 abbrev MintValue := V2.Value
 
-abbrev RedeemerMap := List (ScriptPurpose × V2.Redeemer) -- handled as a Data.Map at the Data level
+def RedeemerMap : Type := List (ScriptPurpose × V2.Redeemer) -- handled as a Data.Map at the Data level
+
+instance : Repr RedeemerMap := inferInstanceAs (Repr (List (ScriptPurpose × V2.Redeemer)))
+
+/-- BEq instance for RedeemerMap -/
+instance : BEq RedeemerMap := ⟨List.beq⟩
+
+/-- DecidableEq instance for RedeemerMap -/
+instance : DecidableEq RedeemerMap := inferInstanceAs (DecidableEq (List (ScriptPurpose × V2.Redeemer)))
+
+/-! LawfulBEq instance for RedeemerMap -/
+instance : LawfulBEq RedeemerMap := inferInstanceAs (LawfulBEq (List (ScriptPurpose × V2.Redeemer)))
+
 
 /-- Return the list `Data × Data` representation for RedeemerMap. -/
 def txInfoRedeemersToListPairData (xs : RedeemerMap) : List (Data × Data) :=
@@ -306,7 +352,7 @@ def listPairDataToTxInfoRedeemers (xs : List (Data × Data)) : Option RedeemerMa
   | [] => some []
   | (d1, d2) :: xs' =>
       match IsData.fromData d1, listPairDataToTxInfoRedeemers xs' with
-      | some purpose, some rest => (purpose, d2) :: rest
+      | some purpose, some rest => some ((purpose, d2) :: rest)
       | _, _ => none
 
 /-- IsData instance for RedeemerMap -/
@@ -316,7 +362,18 @@ instance : IsData RedeemerMap where
   | Data.Map r_map => listPairDataToTxInfoRedeemers r_map
   | _ => none
 
-abbrev GovernanceVoteMap := List (GovernanceActionId × Vote) -- handled as a Data.Map at the Data level
+def GovernanceVoteMap : Type := List (GovernanceActionId × Vote) -- handled as a Data.Map at the Data level
+
+instance : Repr GovernanceVoteMap := inferInstanceAs (Repr (List (GovernanceActionId × Vote)))
+
+/-- BEq instance for GovernanceVoteMap -/
+instance : BEq GovernanceVoteMap := ⟨List.beq⟩
+
+/-- DecidableEq instance for GovernanceVoteMap -/
+instance : DecidableEq GovernanceVoteMap := inferInstanceAs (DecidableEq (List (GovernanceActionId × Vote)))
+
+/-! LawfulBEq instance for GovernanceVoteMap -/
+instance : LawfulBEq GovernanceVoteMap := inferInstanceAs (LawfulBEq (List (GovernanceActionId × Vote)))
 
 /-- Return the list `Data × Data` representation for GovernanceVoteMap. -/
 def governanceVoteMapToListPairData (xs : GovernanceVoteMap) : List (Data × Data) :=
@@ -328,7 +385,7 @@ def listPairDataToGovernanceVoteMap (xs : List (Data × Data)) : Option Governan
   | [] => some []
   | (r_action, r_vote) :: xs' =>
       match IsData.fromData r_action, IsData.fromData r_vote, listPairDataToGovernanceVoteMap xs' with
-      | some action, some vote, some rest => (action, vote) :: rest
+      | some action, some vote, some rest => some ((action, vote) :: rest)
       | _, _, _ => none
 
 /-- IsData instance for GovernanceVoteMap -/
@@ -339,7 +396,18 @@ instance : IsData GovernanceVoteMap where
   | _ => none
 
 
-abbrev VoterMap := List (Voter × GovernanceVoteMap) -- handled as a Data.Map at the Data level
+def VoterMap : Type := List (Voter × GovernanceVoteMap) -- handled as a Data.Map at the Data level
+
+instance : Repr VoterMap := inferInstanceAs (Repr (List (Voter × GovernanceVoteMap)))
+
+/-- BEq instance for VoterMap -/
+instance : BEq VoterMap := ⟨List.beq⟩
+
+/-- DecidableEq instance for VoterMap -/
+instance : DecidableEq VoterMap := inferInstanceAs (DecidableEq (List (Voter × GovernanceVoteMap)))
+
+/-! LawfulBEq instance for VoterMap -/
+instance : LawfulBEq VoterMap := inferInstanceAs (LawfulBEq (List (Voter × GovernanceVoteMap)))
 
 /-- Return the list `Data × Data` representation for VoterMap. -/
 def voterMapToListPairData (xs : VoterMap) : List (Data × Data) :=
@@ -351,7 +419,7 @@ def listPairDataToVoterMap (xs : List (Data × Data)) : Option VoterMap :=
   | [] => some []
   | (r_voter, r_governance) :: xs' =>
       match IsData.fromData r_voter, IsData.fromData r_governance, listPairDataToVoterMap xs' with
-      | some voter, some governance, some rest => (voter, governance) :: rest
+      | some voter, some governance, some rest => some ((voter, governance) :: rest)
       | _, _, _ => none
 
 /-- IsData instance for VoterMap -/
@@ -859,8 +927,9 @@ def validMintValue (v : MintValue) : Bool :=
           ( txOutDatumHash ownResolvedInput = some dh ∧
             ¬ ∃ datum : Datum, (dh, datum) ∈ ctx.scriptContextTxInfo.txInfoData )
 
-     2. optDatum = some datum → txOutInlineDatum ownResolvedInput = some datum
-
+     2. optDatum = some datum →
+          ( txOutInlineDatum ownResolvedInput = some datum ∨
+             ( txOutDatumHash ownResolvedInput = some dh ∧ (dh, datum) ∈ ctx.scriptContextTxInfo.txInfoData ) )
      with:
        - optDatum : corresponding to the optional datum of the current spending script.
        - ownResolvedInput : corresponding to the resolved input `TxOut` for the current spending script.
@@ -876,6 +945,7 @@ def validInputDatum (optDatum : Option V2.Datum) (ownResolvedInput : V2.TxOut) (
   | none, .OutputDatumHash dh => V2.findDatum dh ctx.scriptContextTxInfo.txInfoData == none
   | none, .NoOutputDatum => true
   | some datum, .OutputDatum datum' => datum == datum'
+  | some datum, .OutputDatumHash dh => V2.findDatum dh ctx.scriptContextTxInfo.txInfoData == some datum
   | some _, _ => false
 
 /-- [LEDGER-RULE]: Ledger rules for the certificate of the current certifying script (V3).
@@ -1100,17 +1170,6 @@ def validReferenceInputs (ctx : ScriptContext) : Bool :=
   | x :: xs => V2.validTxOutValue x.txInInfoResolved.txOutValue && visit xs x.txInInfoOutRef
 
 
-/-- [LEDGER-RULE]: Ledger rules for transaction's outputs (V3):
-      - ∀ x ∈ ctx.scriptContextTxInfo.txInfoOutputs,
-           validTxOutValue x.txOutValue
-     with:
-       - ctx : corresponding to the ScriptContext applied to the current validator script.
-
-     NOTE: For V3, a spending script may not have any datum.
--/
-def validOutputs (outputs : List V2.TxOut) : Bool :=
-  Recursor.all x in outputs => V2.validTxOutValue x.txOutValue
-
 /-- [LEDGER-RULE]: Ledger rules for transaction's redeemer map (V3).
     The redeemer map is valid if and only if one of the following conditions is satisfied:
       1. Redeemer map is empty
@@ -1201,7 +1260,7 @@ def isBalanced (ctx : ScriptContext) : Bool :=
         - validReferenceInputs ctx
 
     3. All transaction's outputs are valid, i.e.,
-        - validOutputs ctx.scriptContextTxInfo.txInfoOutputs
+        - V2.validOutputs ctx.scriptContextTxInfo.txInfoOutputs
 
     4. ctx.txInfoFees > 0
 
@@ -1236,7 +1295,7 @@ def isBalanced (ctx : ScriptContext) : Bool :=
 def validTxInfo (ctx : ScriptContext) : Bool :=
   validInputs ctx &&
   validReferenceInputs ctx &&
-  validOutputs ctx.scriptContextTxInfo.txInfoOutputs &&
+  V2.validOutputs ctx.scriptContextTxInfo.txInfoOutputs &&
   ctx.scriptContextTxInfo.txInfoFee > 0 &&
   validMintValue ctx.scriptContextTxInfo.txInfoMint &&
   validWithdrawals ctx.scriptContextTxInfo.txInfoWdrl &&
@@ -1301,6 +1360,5 @@ def validProposingContext (ctx : ScriptContext) : Bool :=
   match ctx.scriptContextScriptInfo with
   | .ProposingScript .. => validScriptContext ctx
   | _ => false
-
 
 end CardanoLedgerApi.V3.Contexts

@@ -10,14 +10,49 @@ open PlutusCore.Integer (Integer)
 open Scripts
 
 /-- `PubKeyHash` is an alias to `ByteString` -/
-abbrev PubKeyHash := ByteString
+def PubKeyHash : Type := ByteString
+
+instance : Repr PubKeyHash := inferInstanceAs (Repr ByteString)
+
+/-- BEq instance for PubKeyHash -/
+instance : BEq PubKeyHash := inferInstanceAs (BEq ByteString)
+
+/-! LawfulBEq instance for PubKeyHash -/
+instance : LawfulBEq PubKeyHash := inferInstanceAs (LawfulBEq ByteString)
+
+/-- DecidableEq instance for PubKeyHash -/
+instance : DecidableEq PubKeyHash := inferInstanceAs (DecidableEq ByteString)
+
+/-- LT instance for PubKeyHash -/
+instance : LT PubKeyHash := inferInstanceAs (LT ByteString)
+
+/-- DecidableLT instance for TxOutRef -/
+instance : DecidableLT (PubKeyHash) := inferInstanceAs (DecidableLT ByteString)
+
+@[simp] theorem beqPubKeyHash_iff_eq (x y : PubKeyHash) : x == y ↔ x = y := by simp [BEq.beq]
+
+@[simp] theorem beqPubKeyHash_false_iff_not_eq (x y : PubKeyHash) : (x == y) = false ↔ x ≠ y := by simp [BEq.beq]
+
+@[simp] theorem PubKeyHash.lt_irrefl (x : PubKeyHash) : ¬ x < x := by apply ByteString.lt_irrefl
+
+/-- Std.Irrefl instance for PubKeyHash -/
+instance : Std.Irrefl (. < . : PubKeyHash → PubKeyHash → Prop) :=
+  inferInstanceAs (Std.Irrefl (. < . : ByteString → ByteString → Prop))
+
+/-- LE instance for PubKeyHash -/
+instance : LE PubKeyHash := inferInstanceAs (LE ByteString)
+
+/-- DecidableLE instance for PubKeyHash -/
+instance : DecidableLE PubKeyHash := inferInstanceAs (DecidableLE ByteString)
+
+/-- ToString instance for PubKeyHash -/
+instance : ToString PubKeyHash := inferInstanceAs (ToString ByteString)
+
+/-- String to PubKeyHash coercion to mimick OverloadedString in Haskell -/
+instance : Coe String PubKeyHash := inferInstanceAs (Coe String ByteString)
 
 /-- IsData instance for PubKeyHash -/
-instance : IsData PubKeyHash where
-  toData := Data.B
-  fromData
-  | Data.B pk => some pk
-  | _ => none
+instance : IsData PubKeyHash := inferInstanceAs (IsData ByteString)
 
 /--  Credentials required to unlock a transaction output. -/
 inductive Credential where
@@ -58,12 +93,37 @@ instance : LawfulBEq Credential where
   rfl {bs} := by simp [BEq.beq]
 
 
+/-- Strict order on `Credential` **in the Cardano ledger's order**, which is NOT
+the Plutus constructor order.
+
+LEDGER CITATION (checkout `cd8b7fab8`): the ledger's `Credential` is
+
+    data Credential (kr :: KeyRole) = ScriptHashObj !ScriptHash | KeyHashObj !(KeyHash kr)
+      deriving (Show, Eq, Generic, Ord)
+
+(`libs/cardano-ledger-core/src/Cardano/Ledger/Credential.hs:96-99`), so its
+derived `Ord` puts **`ScriptHashObj < KeyHashObj`** — the opposite of the Plutus
+declaration order `PubKeyCredential | ScriptCredential` that this function used
+before.  Credential-keyed maps reach `TxInfo` unsorted: `txInfoWdrl =
+transMap transAccountAddress transCoinToLovelace (unWithdrawals …)` with
+`transMap = PV3.unsafeFromList . map … . Map.toList`
+(`eras/conway/impl/src/Cardano/Ledger/Conway/TxInfo.hs:544-546, 692-694`), so
+`validWithdrawals` must use the ledger order or it rejects any real withdrawal map
+mixing script and key credentials (defect D2).
+
+The withdrawal map's ledger key is `AccountAddress = (Network, AccountId
+Credential)` (`libs/cardano-ledger-core/src/Cardano/Ledger/Address.hs:183-191`)
+and Plutus drops the `Network` component; that is harmless because
+`validateWrongNetworkWithdrawal`
+(`eras/shelley/impl/src/Cardano/Ledger/Shelley/Rules/Utxo.hs:181,384`) forces a
+single network per transaction, on which (`Network`, `Credential`) order restricts
+to `Credential` order. -/
 def ltCredential (x y : Credential) : Bool :=
   match x, y with
   | .PubKeyCredential pk1, .PubKeyCredential pk2 => pk1 < pk2
   | .ScriptCredential sh1, .ScriptCredential sh2 => sh1 < sh2
-  | .PubKeyCredential _, .ScriptCredential _ => true
-  | .ScriptCredential _, .PubKeyCredential _ => false
+  | .ScriptCredential _, .PubKeyCredential _ => true
+  | .PubKeyCredential _, .ScriptCredential _ => false
 
 /-- LT instance for Credential -/
 instance : LT Credential where
@@ -88,7 +148,7 @@ instance : DecidableLT Credential := Credential.decLt
 @[simp] theorem ltCredential_same_false (x : Credential) : ltCredential x x = false := by
     cases x <;> simp only [ltCredential, LT.lt] <;> simp <;> apply String.lt_irrefl
 
-theorem Credential.lt_irrefl (x : Credential) : ¬ x < x := by cases x <;> simp [LT.lt]
+@[simp] theorem Credential.lt_irrefl (x : Credential) : ¬ x < x := by cases x <;> simp [LT.lt]
 
 instance : Std.Irrefl (. < . : Credential → Credential → Prop) where
   irrefl := Credential.lt_irrefl

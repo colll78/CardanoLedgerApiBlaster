@@ -121,19 +121,37 @@ instance : LawfulBEq ScriptPurpose where
   rfl {bs} := by simp [BEq.beq]
 
 
+/-- Strict order on the V1/V2 `ScriptPurpose` **in the order the Cardano ledger
+emits `txInfoRedeemers`** (V2; V1 `TxInfo` has no redeemer map), which is NOT the
+Plutus constructor order.
+
+LEDGER CITATION (checkout `cd8b7fab8`): same construction as the V3 case
+(`transTxRedeemers`, `eras/babbage/impl/src/Cardano/Ledger/Babbage/TxInfo.hs:
+217-221` — `unsafeFromList ∘ Map.toList`, no re-sorting), with
+`PlutusPurpose f BabbageEra = AlonzoPlutusPurpose f BabbageEra`
+(`eras/babbage/impl/src/Cardano/Ledger/Babbage/Scripts.hs:61`) whose derived `Ord`
+follows
+
+    AlonzoSpending | AlonzoMinting | AlonzoCertifying | AlonzoRewarding
+
+(`eras/alonzo/impl/src/Cardano/Ledger/Alonzo/Scripts.hs:308-313`), i.e.
+**`Spending < Minting < Certifying < Rewarding`**.  A V2 script executed in the
+Conway era sees `ConwayPlutusPurpose` order instead
+(`Conway/Scripts.hs:202-213`), which restricted to these four kinds is the SAME
+sequence, so the fix is unambiguous across eras.  This is the V1/V2 instance of
+defect D1. -/
 def ltScriptPurpose (x y : ScriptPurpose) : Bool :=
   match x, y with
-  | .Minting cs1, .Minting cs2 => cs1 < cs2
-  | .Minting _, _ => true
   | .Spending tref1, .Spending tref2 => tref1 < tref2
-  | .Spending _, .Minting _ => false
   | .Spending _, _ => true
-  | .Rewarding cred1, .Rewarding cred2 => cred1 < cred2
-  | .Rewarding _, .Minting _
-  | .Rewarding _, .Spending _ => false
-  | .Rewarding _, _ => true
+  | .Minting cs1, .Minting cs2 => cs1 < cs2
+  | .Minting _, .Spending _ => false
+  | .Minting _, _ => true
   | .Certifying cert1, .Certifying cert2 => cert1 < cert2
+  | .Certifying _, .Rewarding _ => true
   | .Certifying _, _ => false
+  | .Rewarding cred1, .Rewarding cred2 => cred1 < cred2
+  | .Rewarding _, _ => false
 
 /-- LT instance for ScriptPurpose -/
 instance : LT ScriptPurpose where
@@ -203,7 +221,18 @@ instance : IsData ScriptPurpose where
        | none => none
   | _ => none
 
-abbrev Withdrawals := List (StakingCredential × Integer)
+def Withdrawals : Type := List (StakingCredential × Integer)
+
+instance : Repr Withdrawals := inferInstanceAs (Repr (List (StakingCredential × Integer)))
+
+/-- BEq instance for Withdrawals -/
+instance : BEq Withdrawals := ⟨List.beq⟩
+
+/-- DecidableEq instance for Withdrawals -/
+instance : DecidableEq Withdrawals := inferInstanceAs (DecidableEq (List (StakingCredential × Integer)))
+
+/-! LawfulBEq instance for Withdrawals -/
+instance : LawfulBEq Withdrawals := inferInstanceAs (LawfulBEq (List (StakingCredential × Integer)))
 
 /- IsData instance for StakingCredential × Integer -/
 instance : IsData (StakingCredential × Integer) where
@@ -225,7 +254,7 @@ def listDataToTxInfoWdrl (xs : List Data) : Option Withdrawals :=
   | [] => some []
   | x :: xs' =>
       match IsData.fromData x, listDataToTxInfoWdrl xs' with
-      | some cred, some rest => cred :: rest
+      | some cred, some rest => some (cred :: rest)
       | _, _ => none
 
 /-- IsData instance for Withdrawals -/
@@ -235,7 +264,18 @@ instance : IsData Withdrawals where
   | Data.List r_wdrwl => listDataToTxInfoWdrl r_wdrwl
   | _ => none
 
-abbrev DatumMap := List (DatumHash × Datum)
+def DatumMap : Type := List (DatumHash × Datum)
+
+instance : Repr DatumMap := inferInstanceAs (Repr (List (DatumHash × Datum)))
+
+/-- BEq instance for DatumMap -/
+instance : BEq DatumMap := ⟨List.beq⟩
+
+/-- DecidableEq instance for DatumMap -/
+instance : DecidableEq DatumMap := inferInstanceAs (DecidableEq (List (DatumHash × Datum)))
+
+/-! LawfulBEq instance for DatumMap -/
+instance : LawfulBEq DatumMap := inferInstanceAs (LawfulBEq (List (DatumHash × Datum)))
 
 /- IsData instance for DatumHash × Datum -/
 instance : IsData (DatumHash × Datum) where
@@ -254,7 +294,7 @@ def listDataToTxInfoData (xs : List Data) : Option DatumMap :=
   | [] => some []
   | x :: xs' =>
       match IsData.fromData x, listDataToTxInfoData xs' with
-      | some d, some rest => d :: rest
+      | some d, some rest => some (d :: rest)
       | _, _ => none
 
 /- IsData instance for DatumMap -/
@@ -403,17 +443,16 @@ def txInfoSignatoriesToListData (xs : List PubKeyHash) : List Data :=
 def listDataToTxInfoSignatories (xs : List Data) : Option (List PubKeyHash) :=
   match xs with
   | [] => some []
-  | Data.B pk :: xs' =>
-      match listDataToTxInfoSignatories xs' with
-      | some rest => pk :: rest
-      | none => none
-  | _ => none
+  | r_pk :: xs' =>
+      match IsData.fromData r_pk, listDataToTxInfoSignatories xs' with
+      | some pk, some rest => pk :: rest
+      | _, _ => none
 
 /-- IsData instance for List PubKeyHash -/
 instance : IsData (List PubKeyHash) where
   toData x := Data.List (txInfoSignatoriesToListData x)
   fromData
-  | Data.List r_sig =>  listDataToTxInfoSignatories r_sig
+  | Data.List r_sig => listDataToTxInfoSignatories r_sig
   | _ => none
 
 
@@ -935,19 +974,21 @@ def validInputs (ctx : ScriptContext) : Bool :=
 
 
 /-- [LEDGER-RULE]: Ledger rules for transaction's outputs (V1):
-      - ∀ x ∈ ctx.scriptContextTxInfo.txInfoOutputs,
-           validTxOutValue x.txOutValue ∧
-           (isScriptCredentialAddress x.txOutAddress → hasDatumHash x)
+      - ∀ x ∈ ctx.scriptContextTxInfo.txInfoOutputs, validTxOutValue x.txOutValue
      with:
        - ctx : corresponding to the ScriptContext applied to the current validator script.
 
-     NOTE: It's not mandatory for a datum hash in a transaction's output to be present in
-     the witness map (even for script address).
+     NOTE: The ledger does not check output datums in any era. `UnspendableUTxONoDatumHash`
+     is raised from `txInsNoDataHash` and so concerns *spent inputs*, not outputs. Paying to
+     a script address without a datum hash is permitted: it creates a UTxO that a V1 script
+     cannot later spend, but the paying transaction is valid and a validator can legitimately
+     observe it.
+
+     This predicate previously also required a datum hash on script-address outputs, which
+     excluded such transactions from every V1 theorem. V3 already had the correct form.
 -/
 def validOutputs (outputs : List TxOut) : Bool :=
-  Recursor.all x in outputs =>
-     validTxOutValue x.txOutValue &&
-     (!(isScriptCredentialAddress x.txOutAddress) || hasDatumHash x)
+  Recursor.all x in outputs => validTxOutValue x.txOutValue
 
 /-- [LEDGER-RULE]: Ledger rules for transaction's Withdrawals.
     The withdrawal map is valid if and only if one of the following conditions is satisfied:

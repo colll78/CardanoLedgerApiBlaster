@@ -191,7 +191,6 @@ namespace CardanoLedgerApi.V3
     validScriptInfo
     validInputs
     validReferenceInputs
-    validOutputs
     validWithdrawals
     validRedeemerMap
     validGovernanceVoteMap

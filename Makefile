@@ -6,7 +6,7 @@ usage:
 	@echo " - build_cardano_ledger_api: Build CardanoLedgerApi formalization."
 	@echo " - clean_cardano_ledger_api: Clean compiled lean files for CardanoLedgerApi formalization."
 	@echo " - check_cardano_ledger_api: Same as build_cardano_ledger_api but also checks that each lean file"
-	@echo "                            in the CardanoLedgerApi formalization is considered during compilatio
+	@echo "                            in the CardanoLedgerApi formalization is considered during compilation."
 	@echo " - build_tests: Build Tests."
 	@echo " - clean_tests: Clean compiled lean files for Tests."
 	@echo " - check_tests: Same as build_tests but also checks that each lean file"
@@ -20,16 +20,16 @@ clean_cardano_ledger_api:
 	lake clean CardanoLedgerApi
 
 .PHONY: check_cardano_ledger_api
-check_cardano_ledger_api:
+check_cardano_ledger_api: clean_cardano_ledger_api
 	./scripts/check_lean_project_compilation.sh CardanoLedgerApi
 
 .PHONY: build_tests
 build_tests:
-	LEAN_NUM_THREADS=5 lake test
+	lake test
 
 .PHONY: clean_tests
 clean_tests:
-	lake clean
+	rm -rf .lake/build/lib/lean/Tests* .lake/build/ir/Tests*
 
 .PHONY: check_tests
 check_tests: clean_tests
