@@ -17,11 +17,16 @@ the `recfun-finder` simplifier; the runner pins the executable it actually finds
 The environment capture and checker both import the Auction model. Rebuilds or
 a different solver require a fresh capture and regeneration of checking contexts.
 
-The claims quantify over integer values within three fixed transaction shapes:
-first bid, replacement bid and payout. They also check the compiled comparison
-helper's native boolean result and malformed context rejection. This is not a
-ledger-validity proof or the complete upstream security audit. Checking uses
-Blaster SMT without reconstruction of a Lean kernel proof.
+The runner checks all 26 upstream theorem statements plus five interface and
+scenario claims against the freshly compiled script. It exercises 18 concrete
+executions and 13 negative checks, including counterexamples to the two upstream
+"always fails" statements. Auction execution has an explicit 20,000 CEK-step
+bound; this is not a ledger cost budget.
+
+The typed contexts preserve the upstream examples, including scenarios with
+non-ledger-valid values. These checks do not establish phase-one acceptance or
+a complete security proof. Checking uses Blaster SMT without reconstruction
+of a Lean kernel proof.
 
 The runner loads Blaster's compiled shared library when it is available on the
 Lake search path. An explicit `ASSURANCE_NATIVE_LIBRARY` overrides discovery;
