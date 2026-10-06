@@ -9,7 +9,7 @@ open PlutusCore.Default.Internal
 
 def runAuction (ctx : CardanoLedgerApi.V3.Contexts.ScriptContext) :=
   cekExecuteProgramWithSemanticVariant BuiltinSemanticsVariant.defaultFunSemanticsVariantE
-    RawAuction.auction.script [Term.Const (.Data (toLedgerData ctx))] 10000
+    RawAuction.auction.script [Term.Const (.Data (toLedgerData ctx))] 20000
 
 #eval show IO Unit from do
   for (name, ctx) in [("first bid", newBidContext 0 100 100 0 1 1725227091000),
@@ -48,4 +48,4 @@ def stepsUsed : State → Nat → Nat → Nat
               payoutContext 100 100 1 1725227091000,
               payoutContext 0 0 1 1725227091000] do
     let .Program _ body := RawAuction.auction.script
-    IO.println s!"concrete execution steps: {stepsUsed (initialState (applyParams body [Term.Const (.Data (toLedgerData ctx))])) 10000 0}"
+    IO.println s!"concrete execution steps: {stepsUsed (initialState (applyParams body [Term.Const (.Data (toLedgerData ctx))])) 20000 0}"
