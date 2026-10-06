@@ -15,13 +15,24 @@ def runAuction (ctx : CardanoLedgerApi.V3.Contexts.ScriptContext) :=
   for (name, ctx) in [("first bid", newBidContext 0 100 100 0 1 1725227091000),
                      ("replacement bid", newBidContext 100 101 101 100 1 1725227091000),
                      ("payout with bid", payoutContext 100 100 1 1725227091000),
-                     ("payout without bid", payoutContext 0 0 1 1725227091000)] do
+                     ("payout without bid", payoutContext 0 0 1 1725227091000),
+                     ("upstream demo bid", demoValidCtx),
+                     ("payout to staked outputs", demoPayoutStakedCtx),
+                     ("dust tokens", newBidAttackContext 100 101 101 100 1 1725227091000 1 0),
+                     ("unchecked minting", newBidAttackContext 100 101 101 100 1 1725227091000 1 999),
+                     ("two input payout", payoutDoubleSatContext 100 100 1 1725227091000)] do
     match runAuction ctx with
     | .Halt (.VCon .Unit) => IO.println s!"PASS {name} returns native unit"
     | _ => throw (IO.userError s!"expected accepted {name}")
   for (name, ctx) in [("low first bid", newBidContext 0 99 99 0 1 1725227091000),
                      ("equal replacement bid", newBidContext 100 100 100 100 1 1725227091000),
-                     ("underpaid seller", payoutContext 100 99 1 1725227091000)] do
+                     ("underpaid seller", payoutContext 100 99 1 1725227091000),
+                     ("wrong token name", demoWrongTnCtx),
+                     ("wrong policy", demoWrongPolicyCtx),
+                     ("hashed datum", demoDatumHashCtx),
+                     ("missing datum", demoNoDatumCtx),
+                     ("wrong bid datum", demoWrongDatumCtx),
+                     ("other redeemer", demoOtherRedeemerCtx)] do
     match runAuction ctx with
     | .Error => IO.println s!"PASS {name} is rejected"
     | _ => throw (IO.userError s!"expected rejected {name}")

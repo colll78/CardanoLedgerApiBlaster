@@ -57,6 +57,7 @@ print(log, end='', flush=True)
 if code: raise RuntimeError('Concrete Auction execution failed')
 
 expected = {'outbids_exact', 'first_bid_exact', 'existing_bid_exact', 'payout_exact', 'malformed_context'}
+expected.update({'audit_newBid_success_requires_output_locks_bid', 'audit_valid_newBid_succeeds', 'audit_demo_valid_bid_accepted', 'audit_newBid_accepts_dust_tokens', 'audit_payout_success_pays_seller_highest_bid', 'audit_newBid_success_requires_before_deadline', 'audit_nb_wrong_policy_rejected', 'audit_payout_staked_outputs_accepted', 'audit_newBid_success_requires_sufficient_bid', 'audit_payout_success_requires_after_deadline', 'audit_newBid_accepts_minimal_increment', 'audit_valid_payout_with_bid_succeeds', 'audit_payout_double_satisfaction', 'audit_newBid_success_requires_bigger_bid', 'audit_nb_datum_wrong_bid_rejected', 'audit_nb_other_redeemer_rejected', 'audit_nb_datum_hash_rejected', 'audit_valid_payout_no_bid_succeeds', 'audit_payout_success_positive_seller_payment', 'audit_nb_wrong_token_name_rejected', 'audit_newBid_success_requires_single_nft', 'audit_newBid_ignores_minting', 'audit_nb_datum_missing_rejected', 'audit_newBid_success_positive_bid', 'audit_payout_success_transfers_asset', 'audit_payout_success_positive_asset'})
 def check_property(prop):
     claim = copy.deepcopy(doc)
     claim['properties'] = [prop]
@@ -146,6 +147,22 @@ def empty_evidence_hashes(d):
         'artifact':{'uri':'environment.json','hash':digest(out / 'environment.json')}}]
 reject('empty-function-evidence-hashes', empty_evidence_hashes, 'too few properties')
 
+# Upstream's two expected counterexamples: successful executions disprove
+# these universally failing scripts. Keep the real context and fragment closure.
+for name, source in [
+    ('newBid-always-fails', '∀ (old proposed locked refund tokens hi : Integer), ¬ auditBid auction old proposed locked refund tokens hi'),
+    ('payout-always-fails', '∀ (bid paid tokens lo : Integer), ¬ auditPayout auction bid paid tokens lo')]:
+    claim = copy.deepcopy(doc)
+    claim['properties'] = [copy.deepcopy(next(p for p in doc['properties'] if p['id'] == 'first_bid_exact'))]
+    claim['properties'][0]['statement']['formal']['source'] = source
+    path = out / (name + '.json')
+    write(path, claim)
+    code, log = run(name, f'#verify_blueprint Counterexample {json.dumps(str(path))}\n')
+    if code == 0 or 'falsified' not in log.lower():
+        raise AssertionError(f'{name}: expected a counterexample\n{log}')
+    checks.append(name)
+    print('PASS', name, flush=True)
+
 def revision(path):
     commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=path, text=True).strip()
     branch = subprocess.check_output(['git', 'branch', '--show-current'], cwd=path, text=True).strip()
@@ -176,7 +193,7 @@ report = {'status':'verified', 'provenance':provenance, 'properties':sorted(expe
           'generator':str(generator), 'generatorHash':digest(generator),
           'nativeBlaster':({'path':native, 'hash':digest(Path(native))} if native else None),
           'blueprintHash':digest(out / 'plutus.json'), 'assuranceHash':digest(out / 'assurance.json'),
-          'upstreamAuctionCommit':'7bff1f69c5827a97128b177b65ce84159dd4ca48',
+          'upstreamAuctionCommit':'9938562fd452351655fe2f6b63e583c62422687c',
           'scope':'Current Plinth compilation; bounded upstream bid/payout context shapes and standalone helper. No compiler-linking proof or ledger-validity claim.',
           'trust':'Blaster SMT, no reconstructed Lean kernel proof.'}
 write(out / 'run-report.json', report)
@@ -197,4 +214,4 @@ for prop in verified['properties']:
         evidence['functionHashes'] = {fid:doc['functions'][fid]['hash'] for fid in prop['scope']['functions']}
     prop['evidence'] = [evidence]
 write(out / 'verified-assurance.json', verified)
-print('PASS five Auction claims and', len(checks), 'negative checks', flush=True)
+print('PASS',len(expected),'Auction claims and', len(checks), 'negative checks', flush=True)
