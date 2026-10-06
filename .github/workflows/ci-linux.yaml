@@ -31,7 +31,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           repository: input-output-hk/Lean-blaster
-          ref: 5270d24e2beb0c038bd453ffffb0ad4972176e7e
+          ref: 7a2f4f0547cce56ec3db3f4f39a8b3bb541c85b9
           path: Lean-blaster
       - name: Checkout coordinated Core
         uses: actions/checkout@v6
