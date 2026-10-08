@@ -24,9 +24,11 @@ In particular, output quantities are nonnegative only for valid output values;
 mint quantities can be negative. Tests check downstream summary use, reject
 unconditional nonnegativity, and check malformed lookup behavior.
 
+The solver features are proposed in [Lean-blaster #285](https://github.com/input-output-hk/Lean-blaster/pull/285), and the PlutusCore changes in [PlutusCoreBlaster #54](https://github.com/input-output-hk/PlutusCoreBlaster/pull/54). Published commits keep this package buildable while these PRs are pending.
+
 ## Trust boundary
 
 These are SMT-verified facts, admitted by Blaster's `blasterProven` axiom;
 they are not Lean kernel proof terms. Solver soundness and the Lean-to-SMT
-translation are trusted. See the dependency's `WSC_PROOF_SUPPORT.md` for its
+translation are trusted. See the dependency's `PROOF_SUPPORT.md` for its
 validation and the proof-registration restrictions.
