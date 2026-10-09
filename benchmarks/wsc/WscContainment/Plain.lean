@@ -18,7 +18,7 @@ theorem successful_implies_programmable_token_containment_original :
       Containment.parametersPublishedBy ctx = some (directory, IsData.toData base) →
       Containment.isProgrammable directory currency ctx.scriptContextTxInfo.txInfoReferenceInputs = true →
       isSuccessful (cekExecuteProgram programmableLogicGlobal.script
-        (programmableLogicGlobalInputs pp ctx) 10000) →
+        (programmableLogicGlobalInputs pp ctx) 300000) →
       Containment.inputQuantityAt base currency token ctx.scriptContextTxInfo.txInfoInputs +
           valueOf currency token ctx.scriptContextTxInfo.txInfoMint ≤
         Containment.outputQuantityAt base currency token ctx.scriptContextTxInfo.txInfoOutputs := by
@@ -30,7 +30,7 @@ theorem successful_implies_containment_or_exemption_original :
       validScriptContext ctx = true →
       Containment.parametersPublishedBy ctx = some (directory, IsData.toData base) →
       isSuccessful (cekExecuteProgram programmableLogicGlobal.script
-        (programmableLogicGlobalInputs pp ctx) 10000) →
+        (programmableLogicGlobalInputs pp ctx) 300000) →
       (Containment.inputQuantityAt base currency token ctx.scriptContextTxInfo.txInfoInputs +
           valueOf currency token ctx.scriptContextTxInfo.txInfoMint ≤
         Containment.outputQuantityAt base currency token ctx.scriptContextTxInfo.txInfoOutputs) ∨

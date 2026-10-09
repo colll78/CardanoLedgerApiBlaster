@@ -2,8 +2,9 @@
 
 This opt-in benchmark gives Blaster optimization branches the same WSC
 containment goal to attempt. It is copied from the WSC reference implementation,
-with the statement, helper definitions, script bytes, and 10,000-step CEK fuel
-preserved. It does not impose an input-size bound or supply a custom invariant.
+with the statement structure, helper definitions, and script bytes preserved.
+The CEK fuel is **300,000 steps**, raised from the reference’s original 10,000.
+It does not impose an input-size bound or supply a custom invariant.
 The repository's ordinary library and test targets do not run this benchmark.
 
 The goal is: for an accepted, valid V3 script context, an asset that is not
@@ -139,13 +140,19 @@ With Lean 4.24.0 and Z3 4.15.2:
 
 - Upstream Blaster `bafdd4f`, ledger `5dab3c4`, and PlutusCore `d85df05` build
   the fixture and specification successfully (349 jobs).
-- The upstream `plain` attempt fails at unsupported `Fin` translation after
-  96.82 seconds of proof-stage wall time, with maximum RSS 4,471,696 KiB. This
+- The earlier **10,000-step** upstream `plain` attempt fails at unsupported
+  `Fin` translation after 96.82 seconds of proof-stage wall time, with maximum RSS 4,471,696 KiB. This
   is a translation failure, not a timeout or a proof of the theorem.
-- Both copied `auto` theorems compile with the WSC reference implementation;
-  the case proof was checked at 447 seconds. Their axiom lists contain
-  `propext`, `Classical.choice`, `Quot.sound`, and `Blaster.Tactic.blasterProven`,
-  with no `sorryAx`.
+- Both **300,000-step** `auto` theorems compile with the same WSC reference
+  runtime used for the earlier 10,000-step control. Full Lean checking took
+  **419.27 seconds** (about seven minutes), with maximum RSS **6,140,964 KiB**
+  (about 5.9 GiB), under a hard 30 GiB memory cap and 45-minute deadline.
+  Their axiom lists contain `propext`, `Classical.choice`, `Quot.sound`, and
+  `Blaster.Tactic.blasterProven`, with no `sorryAx`; see
+  [`validation/auto-300000.log`](validation/auto-300000.log). The committed
+  `Auto.lean` matches the successfully checked source byte for byte; `plain`
+  uses the same statements. The previous 10,000-step case proof reached its
+  checked case at 447 seconds.
 - Local-checkout selection and a 10-second deadline were exercised: setup and
   build completed, and the proof attempt correctly exited 124 as `TIMEOUT`.
 - The DX fixture and specification build on the same unmodified upstream
