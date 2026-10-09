@@ -11,15 +11,28 @@ if (( $# > 0 )); then shift; fi
 case "$mode" in
   plain) proof=WscContainment/Plain.lean ;;
   auto) proof=WscContainment/Auto.lean ;;
-  *) echo "usage: $0 [plain|auto] [-KblasterRev=REF ...]" >&2; exit 2 ;;
+  dx) proof=WscDx/Unshaped.lean ;;
+  *) echo "usage: $0 [plain|auto|dx] [-KblasterRev=REF ...]" >&2; exit 2 ;;
 esac
+library=WscContainment
+default_budget=1800
+memory_max=8G
+memory_high=7G
+lean_memory=5000
+if [[ "$mode" == dx ]]; then
+  library=WscDx
+  default_budget=120
+  memory_max=4G
+  memory_high=3G
+  lean_memory=3000
+fi
 for argument in "$@"; do
   [[ "$argument" == -K* ]] || { echo "Expected a Lake -K configuration argument: $argument" >&2; exit 2; }
   if [[ "$argument" == -KblasterPath=* ]]; then
     blaster_dir="${argument#-KblasterPath=}"
   fi
 done
-budget="${WSC_TIMEOUT_SECONDS:-1800}"
+budget="${WSC_TIMEOUT_SECONDS:-$default_budget}"
 [[ "$budget" =~ ^[1-9][0-9]*$ ]] || { echo "WSC_TIMEOUT_SECONDS must be a positive integer" >&2; exit 2; }
 
 # The scope includes Lean and its solver children. On hosts without systemd,
@@ -27,8 +40,12 @@ budget="${WSC_TIMEOUT_SECONDS:-1800}"
 if [[ "${WSC_SCOPED:-0}" != 1 ]] && command -v systemd-run >/dev/null &&
     systemctl --user show-environment >/dev/null 2>&1; then
   exec systemd-run --user --scope --quiet --unit="wsc-tractability-$$" \
-    -p MemoryMax=8G -p MemoryHigh=7G env WSC_SCOPED=1 \
+    -p "MemoryMax=$memory_max" -p "MemoryHigh=$memory_high" env WSC_SCOPED=1 \
     bash "$script_dir/check.sh" "$mode" "$@"
+fi
+if [[ "$mode" == dx && "${WSC_SCOPED:-0}" != 1 ]]; then
+  echo "DX requires a hard memory scope; run with a user systemd manager or an equivalent container limit (see README)" >&2
+  exit 2
 fi
 
 mkdir -p .lake
@@ -38,6 +55,7 @@ trap 'rm -f -- "$run_dir/libBlaster.so"' EXIT
 {
   echo "mode=$mode"
   echo "wall_budget_seconds=$budget"
+  echo "memory_max=$memory_max"
   echo "benchmark_commit=$(git -C ../.. rev-parse HEAD)"
   lean --version
   z3 --version
@@ -72,18 +90,18 @@ run_stage() {
 }
 
 # Refresh branch refs explicitly and record the commits actually tested.
-run_stage update "${lake_command[@]}" update
+run_stage update "${lake_command[@]}" -R update
 cp lake-manifest.json "$run_dir/lake-manifest.json"
 git -C "$blaster_dir" rev-parse HEAD > "$run_dir/blaster-commit.txt"
 git -C "$blaster_dir" diff --stat > "$run_dir/blaster-dirty.txt"
-run_stage build "${lake_command[@]}" build Blaster:shared WscContainment
+run_stage build "${lake_command[@]}" build Blaster:shared "$library"
 # A concurrent build must not replace a loaded shared library.
 cp "$blaster_dir/.lake/build/lib/libBlaster.so" "$run_dir/libBlaster.so"
 run_stage proof "${lake_command[@]}" env lean --plugin="$run_dir/libBlaster.so" \
-  -j2 -s65536 -M5000 "$proof"
+  -j2 -s65536 "-M$lean_memory" "$proof"
 if grep -q 'sorryAx' "$run_dir/proof.log"; then
   echo "FAILED: theorem depends on sorryAx" | tee "$run_dir/result.txt"
   exit 1
 fi
-echo "PASS: both containment theorems compiled without sorryAx" | tee "$run_dir/result.txt"
+echo "PASS: $mode containment proof compiled without sorryAx" | tee "$run_dir/result.txt"
 cat "$run_dir/proof.log"

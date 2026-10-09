@@ -65,15 +65,15 @@ equivalent container limit to make resource comparisons meaningful.
 Results are written to `.lake/tractability.MODE.XXXXXX/`: dependency revisions,
 tool versions, logs, per-stage elapsed time and maximum RSS, and a result file.
 Compare `proof.time` separately from dependency/build time and use equally warm
-caches. A pass requires both theorems to compile and their printed axiom lists
-to contain no `sorryAx`. A timeout or unsuccessful proof remains a failure;
+caches. A pass requires every selected theorem to compile and its printed
+axiom list to contain no `sorryAx`. A timeout or unsuccessful proof remains a failure;
 there is no expected-`Undetermined` escape hatch. Blaster's existing
 `blasterProven` SMT trust mechanism is retained.
 
 For preparation without an expensive proof attempt:
 
 ```sh
-lake -KblasterRev=YOUR_BRANCH_OR_COMMIT update
+lake -R -KblasterRev=YOUR_BRANCH_OR_COMMIT update
 lake -KblasterRev=YOUR_BRANCH_OR_COMMIT build WscContainment
 ```
 
@@ -92,6 +92,47 @@ It uses that project's supporting solver and library implementations. An
 upstream branch is not assumed to reproduce that result; discovering whether
 it can is the purpose of this benchmark.
 
+## Earlier DX unshaped P1 workload
+
+`WscDx/Unshaped.lean` preserves the earlier `CardanoLedgerApiBlaster-dx`
+`WSC/Benchmark/P1Unshaped.lean` workload: fully symbolic `ppCS` and rewarding
+`ScriptContext`, the corrected `P1UnshapedFormH` statement, signed mint, and
+`#prep_uplc` at **300,000** CEK steps followed by ordinary
+`blaster (timeout: 1800)`. The input uses `toTerm ppCS :: rewardingInputs ctx` directly; every
+transaction field remains symbolic.
+
+This case uses the older production validator from wsc-poc `2306678`, rather
+than the `2e815a1` validator in `WscContainment`. These are separate workloads,
+not interchangeable timing results. The full historical preparation did not
+reach the proof tactic. The theorem remains a real opt-in proof obligation;
+this benchmark does not assert that it is tractable or already proved.
+
+The minimal definitions come from the cleaned `CardanoLedgerApiBlaster` WSC
+source: `WSC/Spec.lean`, `WSC/Model/{Ground,TransferHelpers,Registry}.lean`, and
+`WSC/Props/P1Statement.lean`. Only the namespace changes. The corrected form
+includes the Ada exclusion and two-field directory-node interval decoding.
+Fixture provenance and the exact byte hash are in `fixtures/wsc-dx/README.md`.
+
+```sh
+./check.sh dx -KblasterRev=YOUR_OPTIMIZATION_BRANCH_OR_COMMIT
+```
+
+DX defaults to **120 seconds total** (setup, build, and proof) and a **4 GiB
+hard memory limit**, including solver children. The runner requires a user
+systemd manager for this mode and refuses to run without a hard memory scope.
+Lean also receives `-M3000`. A larger intentional wall budget can be selected
+with `WSC_TIMEOUT_SECONDS`; timeout termination allows five seconds before
+force-killing the process group. No Fin or other solver compatibility patch is
+applied in any mode.
+
+On a host without a user systemd manager, run in a container with a hard
+4 GiB memory limit and set `WSC_SCOPED=1` inside that container. This variable
+asserts that the caller has already applied the limit; do not set it on an
+unbounded host. Build caches should be equally warm when comparing proof time.
+The `WscDx` library target decodes the script and checks the specification
+without running `#prep_uplc`; `check.sh dx` builds it under the same caps before
+attempting the complete preparation and proof.
+
 ## Recorded validation
 
 With Lean 4.24.0 and Z3 4.15.2:
@@ -107,6 +148,15 @@ With Lean 4.24.0 and Z3 4.15.2:
   with no `sorryAx`.
 - Local-checkout selection and a 10-second deadline were exercised: setup and
   build completed, and the proof attempt correctly exited 124 as `TIMEOUT`.
+- The DX fixture and specification build on the same unmodified upstream
+  solver (349 jobs). The complete 300,000-step attempt times out during
+  `#prep_uplc`, before `blaster`, under the 120-second total budget. Its log
+  prints the preparation-start marker and never the completion marker. The
+  scope's hard cap was verified as 4,294,967,296 bytes, and no Lean or solver
+  children remain after timeout. This is an incomplete preparation attempt,
+  not a theorem verdict.
+- DX refuses to run when neither a user systemd manager nor an asserted
+  external hard memory scope is available (exit 2).
 
 ## Inherited specification details
 

@@ -22,3 +22,8 @@ require CardanoLedgerApi from git
 lean_lib WscContainment where
   roots := #[`WscContainment.Specification]
   globs := #[.one `WscContainment.Script, .one `WscContainment.Specification]
+
+-- Decode and state the older DX workload without running its expensive prep.
+lean_lib WscDx where
+  roots := #[`WscDx.Specification]
+  globs := #[.one `WscDx.Script, .one `WscDx.Specification]

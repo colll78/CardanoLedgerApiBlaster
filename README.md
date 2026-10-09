@@ -244,7 +244,9 @@ theorem fibonacci_equiv :
 [`benchmarks/wsc`](benchmarks/wsc/README.md) contains the original WSC
 programmable-token containment statements and an opt-in runner for comparing
 Blaster optimization branches. It records dependency revisions, proof time,
-memory use, and whether the two theorems compile within the selected budget.
+memory use, and whether the selected theorems compile within the budget. It
+also includes the earlier fully symbolic DX P1 workload, with a 4 GiB memory
+cap and 120-second default run budget.
 
 ## General Description
 
